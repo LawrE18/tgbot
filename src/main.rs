@@ -3,6 +3,7 @@ use teloxide::{prelude::*, utils::command::BotCommands};
 use std::error::Error;
 extern crate rand;
 extern crate ed25519_dalek;
+extern crate hex;
 
 use rand::rngs::OsRng;
 use ed25519_dalek::Keypair;
@@ -43,8 +44,8 @@ async fn answer(
             let keypair: Keypair = Keypair::generate(&mut csprng);
             let public_key: PublicKey = keypair.public;
             let public_key_bytes: [u8; PUBLIC_KEY_LENGTH] = public_key.to_bytes();
-            let public_key_str = std::str::from_utf8(public_key_bytes.as_ref()).unwrap().to_string();
-            bot.send_message(message.chat.id, format!("Pub key is: {}", public_key_str)).await?
+            let public_key_hex = hex::encode(public_key_bytes);
+            bot.send_message(message.chat.id, format!("Pub key is: {}", public_key_hex)).await?
         }
         Command::Help => {
             bot.send_message(message.chat.id, Command::descriptions().to_string()).await?
