@@ -1338,12 +1338,15 @@ dependencies = [
 name = "tgbot"
 version = "0.1.0"
 dependencies = [
+ "dptree",
  "ed25519-dalek",
  "hex",
  "log",
  "pretty_env_logger",
  "rand",
+ "serde_json",
  "teloxide",
+ "teloxide-macros",
  "tokio",
 ]
 
