@@ -1,17 +1,17 @@
-extern crate rand;
 extern crate ed25519_dalek;
 extern crate hex;
+extern crate rand;
 
-use rand::rngs::OsRng;
+use ed25519_dalek::Signature;
 use ed25519_dalek::{Keypair, Signer};
 use ed25519_dalek::{PublicKey, SecretKey};
-use ed25519_dalek::Signature;
-use ed25519_dalek::{PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH, KEYPAIR_LENGTH, SIGNATURE_LENGTH};
-use std::io::{BufWriter, Result, Write};
+use ed25519_dalek::{KEYPAIR_LENGTH, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH, SIGNATURE_LENGTH};
+use rand::rngs::OsRng;
 use std::cmp::max;
-use std::str;
 use std::error::Error;
+use std::io::{BufWriter, Result, Write};
 use std::path::Path;
+use std::str;
 
 pub fn read_file_into_binary_vec(file_path: &str) -> Result<Vec<u8>> {
     std::fs::read(file_path)
@@ -25,9 +25,7 @@ pub fn get_address(id_: i64) -> String {
             let pub_hex = hex::encode(pub_bytes);
             pub_hex
         }
-        false => {
-            "Please create a wallet first (type /createwallet)".to_string()
-        }
+        false => "Please create a wallet first (type /createwallet)".to_string(),
     }
 }
 
@@ -39,7 +37,7 @@ fn binary_slice_to_file(data: &[u8], file_path: &str) -> Result<()> {
 }
 
 pub fn gen_key_pair(id_: i64) -> [u8; PUBLIC_KEY_LENGTH] {
-    let mut csprng = OsRng{};
+    let mut csprng = OsRng {};
     let keypair: Keypair = Keypair::generate(&mut csprng);
     let public_key: PublicKey = keypair.public;
     let public_key_bytes: [u8; PUBLIC_KEY_LENGTH] = public_key.to_bytes();
@@ -52,8 +50,7 @@ pub fn gen_key_pair(id_: i64) -> [u8; PUBLIC_KEY_LENGTH] {
     public_key_bytes
 }
 
-
-pub fn sign(id_: i64, data: String) -> [u8; SIGNATURE_LENGTH]{
+pub fn sign(id_: i64, data: String) -> [u8; SIGNATURE_LENGTH] {
     let keypair_path: String = format!("./out/{}.keypair", id_);
     let keypair_bytes = read_file_into_binary_vec(keypair_path.as_str()).unwrap();
     let keypair: Keypair = Keypair::from_bytes(&keypair_bytes).unwrap();
