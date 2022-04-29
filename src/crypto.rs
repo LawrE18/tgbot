@@ -1,9 +1,12 @@
 extern crate hex;
-extern crate rand;
 
 use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 use rand::rngs::OsRng;
-use std::{io::BufWriter, io::Result, io::Write, path::Path, str};
+use std::{
+    io::{BufWriter, Result, Write},
+    path::Path,
+    str,
+};
 
 pub fn read_file_into_binary_vec(file_path: &str) -> Result<Vec<u8>> {
     std::fs::read(file_path)

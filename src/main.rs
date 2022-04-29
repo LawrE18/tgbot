@@ -66,20 +66,21 @@ async fn start(
     dialogue: MyDialogue,
 ) -> HandlerResult {
     match command {
-        Command::Help => {
-            bot.send_message(message.chat.id, Command::descriptions().to_string())
-                .await?
-        }
+        Command::Help => help_message(bot, message).await?,
         Command::CreateWallet => create_wallet_message(bot, message).await?,
         Command::GetMyAddress => get_address_message(bot, message).await?,
         Command::SignTx => {
             dialogue.update(State::ReceiveTo).await?;
-            bot.send_message(message.chat.id, "To whom".to_string())
-                .await?
+            signtx_message(bot, message).await?
         }
     };
 
     Ok(())
+}
+
+async fn help_message(bot: AutoSend<Bot>, msg: Message) -> Result<Message, teloxide::RequestError> {
+    bot.send_message(msg.chat.id, Command::descriptions().to_string())
+        .await
 }
 
 async fn create_wallet_message(
@@ -87,11 +88,8 @@ async fn create_wallet_message(
     msg: Message,
 ) -> Result<Message, teloxide::RequestError> {
     let pub_bytes = crypto::gen_key_pair(msg.chat.id.0);
-    bot.send_message(
-        msg.chat.id,
-        format!("pub key: {}", hex::encode(pub_bytes)),
-    )
-    .await
+    bot.send_message(msg.chat.id, format!("pub key: {}", hex::encode(pub_bytes)))
+        .await
 }
 
 async fn get_address_message(
@@ -103,6 +101,13 @@ async fn get_address_message(
         format!("address: {}", crypto::get_address(msg.chat.id.0)),
     )
     .await
+}
+
+async fn signtx_message(
+    bot: AutoSend<Bot>,
+    msg: Message,
+) -> Result<Message, teloxide::RequestError> {
+    bot.send_message(msg.chat.id, "To whom".to_string()).await
 }
 
 async fn receive_to(bot: AutoSend<Bot>, msg: Message, dialogue: MyDialogue) -> HandlerResult {
