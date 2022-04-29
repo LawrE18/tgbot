@@ -7,6 +7,7 @@ use serde_json::json;
 
 type MyDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
 #[derive(Clone)]
 pub enum State {
     Start,
