@@ -17,6 +17,20 @@ pub fn read_file_into_binary_vec(file_path: &str) -> Result<Vec<u8>> {
     std::fs::read(file_path)
 }
 
+pub fn get_address(id_: i64) -> String {
+    let pub_path: String = format!("./out/{}.pub", id_);
+    match Path::new(pub_path.as_str()).exists() {
+        true => {
+            let pub_bytes = read_file_into_binary_vec(pub_path.as_str()).unwrap();
+            let pub_hex = hex::encode(pub_bytes);
+            pub_hex
+        }
+        false => {
+            "Please create a wallet first (type /createwallet)".to_string()
+        }
+    }
+}
+
 fn binary_slice_to_file(data: &[u8], file_path: &str) -> Result<()> {
     let path = Path::new(file_path);
     let file = std::fs::File::create(path)?;

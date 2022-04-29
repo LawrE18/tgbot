@@ -64,6 +64,8 @@ enum Command {
     Help,
     #[command(description = "create wallet.")]
     CreateWallet,
+    #[command(description = "get address.")]
+    GetMyAddress,
     #[command(description = "sign tx.")]
     SignTx,
 }
@@ -84,22 +86,13 @@ async fn start(
             let pub_hex = hex::encode(pub_bytes);
             bot.send_message(message.chat.id, format!("pub key is: {}", pub_hex)).await?
         }
+        Command::GetMyAddress => {
+            let pub_hex = crypto::get_address(message.chat.id.0);
+            bot.send_message(message.chat.id, format!("your address: {}", pub_hex)).await?
+        }
         Command::SignTx => {
-            // match message.text() {
-            //     Some(text) => {
-            //         bot.send_message(message.chat.id, "To whom?").await?;
-            //         dialogue.update(State::ReceiveTo).await?;
-            //     }
-            //     None => {
-            //         bot.send_message(message.chat.id, "Send me plain text.").await?;
-            //     }
-            // }
             dialogue.update(State::ReceiveTo).await?;
             bot.send_message(message.chat.id, "To whom?").await?
-            //bot.send_message(message.chat.id, format!("pub key is: {}", "1")).await?
-            //dialogue.update(State::ReceiveTo).await?;
-            //receive_to(bot, message.clone(), dialogue).await?
-            //bot.send_message(message.chat.id, format!("pub key is: {}", "1")).await?
         }
     };
 
@@ -132,8 +125,6 @@ async fn signing(
 ) -> HandlerResult {
     match msg.text().map(|text| text.parse::<u32>()) {
         Some(Ok(amount)) => {
-            let pub_path: String = format!("./out/{}.pub", msg.chat.id.0);
-            let pub_bytes = crypto::read_file_into_binary_vec(pub_path.as_str()).unwrap();
             let from = msg.chat.username();
             let tx = json!({
                 "from": from,
