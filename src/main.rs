@@ -1,17 +1,9 @@
 mod crypto;
-
-use teloxide::{utils::command::BotCommands,
-               dispatching::dialogue::InMemStorage,
-               prelude::*,
-               types::{Dice, Update, UserId},
+use teloxide::{
+    dispatching::dialogue::InMemStorage, prelude::*, types::Update, utils::command::BotCommands,
 };
 
-use std::time::{Duration, Instant};
-use dptree;
-
-use std::error::Error;
-use serde_json::{json, to_string};
-use crate::State::Start;
+use serde_json::json;
 
 type MyDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -39,17 +31,14 @@ async fn main() {
 
     let handler = Update::filter_message()
         .enter_dialogue::<Message, InMemStorage<State>, State>()
-        .branch(dptree::case![State::Start]
-            .branch(dptree::entry().filter_command::<Command>().endpoint(start))
+        .branch(
+            dptree::case![State::Start]
+                .branch(dptree::entry().filter_command::<Command>().endpoint(start)),
         )
-        .branch(dptree::case![State::ReceiveTo].endpoint(receive_to)
-        )
-        .branch(dptree::case![State::ReceiveAmount {to}].endpoint(signing)
-        );
+        .branch(dptree::case![State::ReceiveTo].endpoint(receive_to))
+        .branch(dptree::case![State::ReceiveAmount { to }].endpoint(signing));
 
-    Dispatcher::builder(
-        cloned_bot,
-        handler)
+    Dispatcher::builder(cloned_bot, handler)
         .dependencies(dptree::deps![InMemStorage::<State>::new()])
         .build()
         .setup_ctrlc_handler()
@@ -76,19 +65,21 @@ async fn start(
     command: Command,
     dialogue: MyDialogue,
 ) -> HandlerResult {
-
     match command {
         Command::Help => {
-            bot.send_message(message.chat.id, Command::descriptions().to_string()).await?
+            bot.send_message(message.chat.id, Command::descriptions().to_string())
+                .await?
         }
         Command::CreateWallet => {
             let pub_bytes = crypto::gen_key_pair(message.chat.id.0);
             let pub_hex = hex::encode(pub_bytes);
-            bot.send_message(message.chat.id, format!("pub key is: {}", pub_hex)).await?
+            bot.send_message(message.chat.id, format!("pub key is: {}", pub_hex))
+                .await?
         }
         Command::GetMyAddress => {
             let pub_hex = crypto::get_address(message.chat.id.0);
-            bot.send_message(message.chat.id, format!("your address: {}", pub_hex)).await?
+            bot.send_message(message.chat.id, format!("your address: {}", pub_hex))
+                .await?
         }
         Command::SignTx => {
             dialogue.update(State::ReceiveTo).await?;
@@ -99,15 +90,13 @@ async fn start(
     Ok(())
 }
 
-async fn receive_to(
-    bot: AutoSend<Bot>,
-    msg: Message,
-    dialogue: MyDialogue,
-) -> HandlerResult {
+async fn receive_to(bot: AutoSend<Bot>, msg: Message, dialogue: MyDialogue) -> HandlerResult {
     match msg.text() {
         Some(text) => {
             bot.send_message(msg.chat.id, "Amount?").await?;
-            dialogue.update(State::ReceiveAmount { to: text.into() }).await?;
+            dialogue
+                .update(State::ReceiveAmount { to: text.into() })
+                .await?;
         }
         None => {
             bot.send_message(msg.chat.id, "Send me plain text.").await?;
