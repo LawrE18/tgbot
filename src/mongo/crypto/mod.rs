@@ -8,6 +8,18 @@ use std::{
     str,
 };
 
+pub mod crypto_provider;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Ed25519 {
+    pub id_: i64,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Sr25519 {
+    pub id_: i64,
+}
+
 pub fn read_file_into_binary_vec(file_path: &str) -> Result<Vec<u8>> {
     std::fs::read(file_path)
 }
@@ -24,7 +36,7 @@ pub fn get_address(id_: i64) -> String {
     }
 }
 
-fn binary_slice_to_file(data: &[u8], file_path: &str) -> Result<()> {
+pub fn binary_slice_to_file(data: &[u8], file_path: &str) -> Result<()> {
     let path = Path::new(file_path);
     let file = std::fs::File::create(path)?;
     let mut buf_writer = BufWriter::new(file);
