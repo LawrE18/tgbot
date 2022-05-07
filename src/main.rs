@@ -1,3 +1,4 @@
+use postgres::crypto::crypto_provider::CryptoProvider;
 use teloxide::{
     dispatching::dialogue::InMemStorage,
     prelude::*,
@@ -12,11 +13,77 @@ use serde_json::json;
 type MyDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-pub mod mongo;
-pub use mongo::crypto::*;
+pub mod postgres;
+pub use postgres::crypto::users::User;
+pub use postgres::crypto::*;
+
+#[macro_use]
+extern crate diesel;
+
+#[macro_use]
+extern crate diesel_migrations;
+
 pub mod traits;
-use std::{str, vec};
+use std::str;
 pub use traits::*;
+
+// struct Schemes<T: CryptoProvider> {
+//     scheme: T,
+// }
+
+// impl<T: CryptoProvider> Schemes<T> {
+//     fn create_entity(&self, scheme_name: &str, id: i64) -> T {
+//         match scheme_name {
+//             "Ed25519" => {
+//                 Ed25519 {id_: id}
+//             },
+//             "Sr25519" => {
+//                 Sr25519 {id_: id}
+//             }
+//         }
+//     }
+// }
+
+#[derive(Debug)]
+pub enum Schemes {
+    Ed25519obj(Ed25519),
+    Sr25519obj(Sr25519),
+}
+
+impl Schemes {
+    fn create_entity(scheme_name: &str, username_: String) -> Schemes {
+        match scheme_name {
+            "Ed25519" => Schemes::Ed25519obj(Ed25519 {
+                username: username_,
+            }),
+            "Sr25519" => Schemes::Sr25519obj(Sr25519 {
+                username: username_,
+            }),
+            _ => panic!("error"),
+        }
+    }
+
+    fn generate(&self) -> Result<String, String> {
+        match self {
+            Schemes::Ed25519obj(f) => f.clone().generate_keypairs(),
+            Schemes::Sr25519obj(s) => s.clone().generate_keypairs(),
+        }
+    }
+
+    // fn public(&self) -> Result<String, String> {
+    //     match self {
+    //         Schemes::Ed25519obj(f) => f.clone().get_public(),
+    //         Schemes::Sr25519obj(s) => s.clone().get_public(),
+    //     }
+    // }
+
+    fn sign(&self, tx: String) -> Result<String, String> {
+        match self {
+            Schemes::Ed25519obj(f) => f.clone().sign_transaction(tx),
+            Schemes::Sr25519obj(s) => s.clone().sign_transaction(tx),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub enum State {
@@ -104,13 +171,7 @@ async fn message_handler(
 ) -> HandlerResult {
     match command {
         Command::Help => help_message(bot, message).await?,
-        Command::CreateWallet => {
-            //let keyboard = make_keyboard();
-            //bot.send_message(message.chat.id, "Signature schemes")
-            //    .reply_markup(keyboard)
-            //    .await?;
-            create_wallet_message(bot, message).await?
-        }
+        Command::CreateWallet => create_wallet_message(bot, message).await?,
         Command::GetMyAddress => get_address_message(bot, message).await?,
         Command::SignTx => {
             dialogue.update(State::ReceiveTo).await?;
@@ -137,26 +198,30 @@ async fn inline_query_handler(q: InlineQuery, bot: AutoSend<Bot>) -> HandlerResu
 
 async fn callback_handler(q: CallbackQuery, bot: AutoSend<Bot>) -> HandlerResult {
     if let Some(scheme) = q.data {
-        let mut text = format!("You chose: {scheme}");
+        let mut text = format!("You chose: {scheme}\n Your pub key: ");
+        let msg = q.message.unwrap();
+        let schm =
+            Schemes::create_entity(scheme.as_str(), msg.chat.username().unwrap().to_string());
+        let pub_key = schm.generate();
 
-        match q.message {
-            Some(Message { id, chat, .. }) => {
-                let user = Sr25519 { id_: chat.id.0 };
-                user.generate_keypairs().expect("error in gen keypairs");
-                if let Ok(t) = user.get_public() {
-                    text = hex::encode(t);
-                }
-                //create_wallet_message(bot, msg).await?;
-                bot.edit_message_text(chat.id, id, text).await?;
-            }
-            None => {
-                if let Some(id) = q.inline_message_id {
-                    bot.edit_message_text_inline(id, text).await?;
-                }
-            }
+        if let Ok(t) = pub_key {
+            text.push_str(hex::encode(t).as_str());
         }
+        // let schm = Schemes::from_str(scheme.as_str(), msg.chat.id.0);
 
-        log::info!("You chose: {}", scheme);
+        // let pub = match scheme.as_str() {
+        //     "Ed25519" => {
+        //         let user = Schemes {scheme: Ed25519 { id_: msg.chat.id.0 }};
+        //         user.scheme.generate_keypairs().expect("error");
+        //         user.scheme.get_public().expect("error")
+        //     }
+        //     "Sr25519" = {
+        //         let user = Schemes {scheme: Sr25519 { id_: msg.chat.id.0 }};
+        //         user.scheme.generate_keypairs().expect("error");
+        //         user.scheme.get_public().expect("error")
+        //     }
+        // }
+        bot.edit_message_text(msg.chat.id, msg.id, text).await?;
     }
 
     Ok(())
@@ -181,11 +246,11 @@ async fn get_address_message(
     bot: AutoSend<Bot>,
     msg: Message,
 ) -> Result<Message, teloxide::RequestError> {
-    bot.send_message(
-        msg.chat.id,
-        format!("address: {}", get_address(msg.chat.id.0)),
-    )
-    .await
+    let pubkey = User::find(msg.chat.username().unwrap().to_string())
+        .unwrap()
+        .pubkey;
+    bot.send_message(msg.chat.id, format!("address: {pubkey}",))
+        .await
 }
 
 async fn signtx_message(
@@ -225,7 +290,13 @@ async fn signing(
                 "to": to,
                 "amount": amount,
             });
-            let sign = hex::encode(sign(msg.chat.id.0, tx.to_string()));
+            let scheme = User::find(msg.chat.username().unwrap().to_string())
+                .unwrap()
+                .sig_scheme;
+            let schm =
+                Schemes::create_entity(scheme.as_str(), msg.chat.username().unwrap().to_string());
+            let sign = schm.sign(tx.to_string()).unwrap();
+            //let sign = hex::encode(sign(msg.chat.id.0, tx.to_string()));
             let signed_tx = json!({
                 "from": from,
                 "to": to,
