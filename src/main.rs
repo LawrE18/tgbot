@@ -1,4 +1,3 @@
-use postgres::crypto::crypto_provider::CryptoProvider;
 use teloxide::{
     dispatching::dialogue::InMemStorage,
     prelude::*,
@@ -13,36 +12,12 @@ use serde_json::json;
 type MyDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-pub mod postgres;
-pub use postgres::crypto::users::User;
-pub use postgres::crypto::*;
-
-#[macro_use]
-extern crate diesel;
-
-#[macro_use]
-extern crate diesel_migrations;
+pub mod providers;
+pub use providers::crypto::{users::User, Ed25519, Sr25519};
 
 pub mod traits;
 use std::str;
 pub use traits::*;
-
-// struct Schemes<T: CryptoProvider> {
-//     scheme: T,
-// }
-
-// impl<T: CryptoProvider> Schemes<T> {
-//     fn create_entity(&self, scheme_name: &str, id: i64) -> T {
-//         match scheme_name {
-//             "Ed25519" => {
-//                 Ed25519 {id_: id}
-//             },
-//             "Sr25519" => {
-//                 Sr25519 {id_: id}
-//             }
-//         }
-//     }
-// }
 
 #[derive(Debug)]
 pub enum Schemes {
@@ -69,13 +44,6 @@ impl Schemes {
             Schemes::Sr25519obj(s) => s.clone().generate_keypairs(),
         }
     }
-
-    // fn public(&self) -> Result<String, String> {
-    //     match self {
-    //         Schemes::Ed25519obj(f) => f.clone().get_public(),
-    //         Schemes::Sr25519obj(s) => s.clone().get_public(),
-    //     }
-    // }
 
     fn sign(&self, tx: String) -> Result<String, String> {
         match self {
@@ -132,7 +100,6 @@ async fn main() {
         .await;
 }
 
-/// Creates a keyboard made by buttons in a big column.
 fn make_keyboard() -> InlineKeyboardMarkup {
     let mut keyboard: Vec<Vec<InlineKeyboardButton>> = vec![];
 
@@ -205,22 +172,8 @@ async fn callback_handler(q: CallbackQuery, bot: AutoSend<Bot>) -> HandlerResult
         let pub_key = schm.generate();
 
         if let Ok(t) = pub_key {
-            text.push_str(hex::encode(t).as_str());
+            text.push_str(t.as_str());
         }
-        // let schm = Schemes::from_str(scheme.as_str(), msg.chat.id.0);
-
-        // let pub = match scheme.as_str() {
-        //     "Ed25519" => {
-        //         let user = Schemes {scheme: Ed25519 { id_: msg.chat.id.0 }};
-        //         user.scheme.generate_keypairs().expect("error");
-        //         user.scheme.get_public().expect("error")
-        //     }
-        //     "Sr25519" = {
-        //         let user = Schemes {scheme: Sr25519 { id_: msg.chat.id.0 }};
-        //         user.scheme.generate_keypairs().expect("error");
-        //         user.scheme.get_public().expect("error")
-        //     }
-        // }
         bot.edit_message_text(msg.chat.id, msg.id, text).await?;
     }
 
@@ -296,7 +249,6 @@ async fn signing(
             let schm =
                 Schemes::create_entity(scheme.as_str(), msg.chat.username().unwrap().to_string());
             let sign = schm.sign(tx.to_string()).unwrap();
-            //let sign = hex::encode(sign(msg.chat.id.0, tx.to_string()));
             let signed_tx = json!({
                 "from": from,
                 "to": to,
