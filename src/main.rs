@@ -1,3 +1,4 @@
+use serde_json::json;
 use teloxide::{
     dispatching::dialogue::InMemStorage,
     prelude::*,
@@ -7,8 +8,6 @@ use teloxide::{
     },
     utils::command::BotCommands,
 };
-
-use serde_json::json;
 type MyDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
@@ -38,14 +37,14 @@ impl Schemes {
         }
     }
 
-    fn generate(&self) -> Result<String, String> {
+    fn generate(&self) -> Result<String, anyhow::Error> {
         match self {
             Schemes::Ed25519obj(f) => f.clone().generate_keypairs(),
             Schemes::Sr25519obj(s) => s.clone().generate_keypairs(),
         }
     }
 
-    fn sign(&self, tx: String) -> Result<String, String> {
+    fn sign(&self, tx: String) -> Result<String, anyhow::Error> {
         match self {
             Schemes::Ed25519obj(f) => f.clone().sign_transaction(tx),
             Schemes::Sr25519obj(s) => s.clone().sign_transaction(tx),
@@ -166,15 +165,22 @@ async fn inline_query_handler(q: InlineQuery, bot: AutoSend<Bot>) -> HandlerResu
 async fn callback_handler(q: CallbackQuery, bot: AutoSend<Bot>) -> HandlerResult {
     if let Some(scheme) = q.data {
         let mut text = format!("You chose: {scheme}\n Your pub key: ");
-        let msg = q.message.unwrap();
-        let schm =
-            Schemes::create_entity(scheme.as_str(), msg.chat.username().unwrap().to_string());
-        let pub_key = schm.generate();
-
-        if let Ok(t) = pub_key {
-            text.push_str(t.as_str());
+        match q.message {
+            Some(Message { id, chat, .. }) => {
+                let username = chat.username().expect("error get username").to_string();
+                let schm = Schemes::create_entity(scheme.as_str(), username);
+                let pub_key = schm.generate();
+                if let Ok(t) = pub_key {
+                    text.push_str(t.as_str());
+                }
+                bot.edit_message_text(chat.id, id, text).await?;
+            }
+            None => {
+                if let Some(id) = q.inline_message_id {
+                    bot.edit_message_text_inline(id, text).await?;
+                }
+            }
         }
-        bot.edit_message_text(msg.chat.id, msg.id, text).await?;
     }
 
     Ok(())
@@ -189,21 +195,44 @@ async fn create_wallet_message(
     bot: AutoSend<Bot>,
     msg: Message,
 ) -> Result<Message, teloxide::RequestError> {
-    let keyboard = make_keyboard();
-    bot.send_message(msg.chat.id, "Signature schemes:")
-        .reply_markup(keyboard)
-        .await
+    let username = msg.chat.username().expect("error get username").to_string();
+    match User::find(&username) {
+        Ok(user) => {
+            let pubkey = user.pubkey;
+            bot.send_message(
+                msg.chat.id,
+                format!("Already have keys. Your pub key:\n {pubkey}"),
+            )
+            .await
+        }
+        Err(_) => {
+            let keyboard = make_keyboard();
+            bot.send_message(msg.chat.id, "Signature schemes:")
+                .reply_markup(keyboard)
+                .await
+        }
+    }
 }
 
 async fn get_address_message(
     bot: AutoSend<Bot>,
     msg: Message,
 ) -> Result<Message, teloxide::RequestError> {
-    let pubkey = User::find(msg.chat.username().unwrap().to_string())
-        .unwrap()
-        .pubkey;
-    bot.send_message(msg.chat.id, format!("address: {pubkey}",))
-        .await
+    let username = msg.chat.username().expect("error get username").to_string();
+    match User::find(&username) {
+        Ok(t) => {
+            let pubkey = t.pubkey;
+            bot.send_message(msg.chat.id, format!("address: {pubkey}",))
+                .await
+        }
+        Err(_) => {
+            bot.send_message(
+                msg.chat.id,
+                "First, please create a wallet with the command: /createwallet".to_string(),
+            )
+            .await
+        }
+    }
 }
 
 async fn signtx_message(
@@ -243,12 +272,10 @@ async fn signing(
                 "to": to,
                 "amount": amount,
             });
-            let scheme = User::find(msg.chat.username().unwrap().to_string())
-                .unwrap()
-                .sig_scheme;
-            let schm =
-                Schemes::create_entity(scheme.as_str(), msg.chat.username().unwrap().to_string());
-            let sign = schm.sign(tx.to_string()).unwrap();
+            let username = msg.chat.username().expect("error get username").to_string();
+            let scheme = User::find(&username).expect("error find user").sig_scheme;
+            let schm = Schemes::create_entity(scheme.as_str(), username);
+            let sign = schm.sign(tx.to_string())?;
             let signed_tx = json!({
                 "from": from,
                 "to": to,

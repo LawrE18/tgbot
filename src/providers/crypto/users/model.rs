@@ -1,4 +1,5 @@
 use crate::providers::db::HASHMAP;
+use anyhow::{bail, Ok, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 
@@ -10,22 +11,22 @@ pub struct User {
 }
 
 impl User {
-    pub fn find(username: String) -> anyhow::Result<Self> {
-        let map = HASHMAP.lock().unwrap();
-        let user: User = map.get(&username).unwrap().to_owned();
-        Ok(user)
+    pub fn find(username: &String) -> Result<Self, anyhow::Error> {
+        let map = HASHMAP.lock().expect("error lock");
+        match map.get(username) {
+            Some(u) => Ok(u.to_owned()),
+            None => bail!("error get user"),
+        }
     }
 
-    pub fn insert(username: String, user: User) -> anyhow::Result<Self> {
-        let mut map = HASHMAP.lock().unwrap();
-        let user1 = user.clone();
-        let user2 = user.clone();
+    pub fn insert(username: String, user: User) -> Result<Self> {
+        let mut map = HASHMAP.lock().expect("error lock");
         match map.entry(username) {
             Entry::Vacant(e) => {
-                e.insert(user);
-                Ok(user1)
+                e.insert(user.clone());
             }
-            Entry::Occupied(mut e) => { let u = e.get_mut(); *u = user1; Ok(user2) },
-        }
+            Entry::Occupied(_) => {}
+        };
+        Ok(user)
     }
 }
