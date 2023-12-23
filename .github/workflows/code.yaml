@@ -35,7 +35,7 @@ jobs:
         run: cargo test
     
   coverage:
-    if: github.event.push.branch == develop
+    if: github.event.push.branch == "develop"
     name: Coverage
     strategy:
       matrix:
