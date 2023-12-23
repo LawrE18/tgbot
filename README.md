@@ -1,2 +1,2 @@
-![example workflow](https://github.com/github/docs/actions/workflows/main.yml/badge.svg)
+![example workflow](https://github.com/LawrE18/tgbot/actions/workflows/code.yml/badge.svg)
 # tgbot
